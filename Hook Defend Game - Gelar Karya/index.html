@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hook Defend Game</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <style>
+    #scoreDisplay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      font-weight: bold;
+      color: yellow;
+      text-shadow: 2px 2px 5px black;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 8px 14px;
+      border-radius: 8px;
+      z-index: 10;
+      transition: transform 0.2s ease;
+    }
+
+    #scoreDisplay.bump {
+      transform: scale(1.2);
+    }
+  </style>
+
+  <body>
+    <div id="scoreDisplay" style="display: none"></div>
+    <div id="timerDisplay" style="display: none">Time: 0</div>
+    <div id="livesDisplay" style="display: none"></div>
+    <div id="shotEnergyDisplay" style="display: none">Shot Energy: 100%</div>
+    <div id="highScoreDisplay" style="display: none">High Score: 0</div>
+
+    <div id="lobbyScreen">
+      <h1>Hook Defend Game</h1>
+      <select
+        id="musicSelect"
+        style="padding: 8px; font-size: 14px; border-radius: 6px"
+      >
+        <option value="playlist/chill.mp3">Chill</option>
+        <option value="playlist/Middle.mp3">Middle</option>
+        <option value="playlist/epic.mp3">Epic</option>
+      </select>
+      <p>Enter your username:</p>
+      <div style="margin: 20px 0">
+        <label
+          for="usernameInput"
+          style="font-size: 18px; display: block; margin-bottom: 6px"
+        >
+        </label>
+        <input
+          type="text"
+          id="usernameInput"
+          placeholder=""
+          style="
+            padding: 10px;
+            font-size: 16px;
+            width: 250px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+          "
+        />
+      </div>
+      <p>Click "Start Game" to begin!</p>
+    </div>
+
+    <div id="gameContainer">
+      <div id="gameBackground"></div>
+      <canvas id="gameCanvas" width="800" height="600"></canvas>
+    </div>
+
+    <div id="gameControls">
+      <div id="timeSelection">
+        <label for="timeSelect">Game Time:</label>
+        <select id="timeSelect">
+          <option value="30">30 Seconds</option>
+          <option value="60" selected>60 Seconds</option>
+          <option value="90">90 Seconds</option>
+          <option value="120">120 Seconds</option>
+        </select>
+      </div>
+      <button id="startButton">Start Game</button>
+      <button id="resetButton" style="display: none">Reset Game</button>
+      <div id="skillButtons" style="display: none">
+        <button id="boostButton">Skill: Boost (Q) (Ready)</button>
+        <button id="dashButton">Skill: Dash (W) (Ready)</button>
+        <button id="explodeButton">Skill: Explode (E) (Ready)</button>
+        <button id="shootButton">Shoot (Space/F)</button>
+      </div>
+    </div>
+
+    <audio id="gameAudio" loop>
+      <source src="musik.mp3" type="audio/mpeg" />
+      Your browser does not support the audio element.
+    </audio>
+    <!-- suara untuk skill dan isi username -->
+    <audio id="shootAudio" src="sound/power_down.mp3" preload="auto"></audio>
+    <audio id="errorAudio" src="sound/error.mp3" preload="auto"></audio>
+    <audio id="explodeAudio" src="sound/popup.mp3" preload="auto"></audio>
+    <audio id="milestoneAudio" src="sound/score.mp3" preload="auto"></audio>
+    <!-- suara akhir -->
+    <audio id="winAudio" src="end/gamewin.mp3" preload="auto"></audio>
+    <audio id="gameOverAudio" src="end/gameover.mp3" preload="auto"></audio>
+
+    <script>
+      // Simpan referensi ke fungsi initGame asli
+      const originalInitGame = initGame;
+
+      // Override fungsi initGame untuk menambahkan jeda 3 detik dengan countdown
+      initGame = function () {
+        // Tampilkan pesan jeda atau indikator visual
+        lobbyScreen.style.display = "block";
+        gameContainer.style.display = "none";
+        startButton.style.display = "none";
+        document.getElementById("timeSelection").style.display = "none";
+
+        let countdown = 3;
+        lobbyScreen.innerHTML = `<h1>Hook Defend Game</h1><p>Starting in ${countdown}...</p>`;
+
+        // Update countdown setiap detik
+        const countdownInterval = setInterval(() => {
+          countdown--;
+          if (countdown > 0) {
+            lobbyScreen.innerHTML = `<h1>Hook Defend Game</h1><p>Starting in ${countdown}...</p>`;
+          } else {
+            clearInterval(countdownInterval); // Stop countdown
+            // Panggil fungsi initGame asli
+            originalInitGame();
+            // Perbarui tampilan lobby setelah countdown selesai
+            lobbyScreen.innerHTML =
+              "<h1>Hook Defend</h1><p>Click 'Start Game' to begin!</p>";
+          }
+        }, 1000);
+      };
+
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      // ... (DOM element selections are the same as before)
+      const startButton = document.getElementById("startButton");
+      const resetButton = document.getElementById("resetButton");
+      const boostButton = document.getElementById("boostButton");
+      const dashButton = document.getElementById("dashButton");
+      const explodeButton = document.getElementById("explodeButton");
+      const shootButton = document.getElementById("shootButton");
+      const scoreDisplay = document.getElementById("scoreDisplay");
+      const timerDisplay = document.getElementById("timerDisplay");
+      const livesDisplay = document.getElementById("livesDisplay");
+      const shotEnergyDisplay = document.getElementById("shotEnergyDisplay");
+      const highScoreDisplay = document.getElementById("highScoreDisplay");
+      const timeSelect = document.getElementById("timeSelect");
+      const lobbyScreen = document.getElementById("lobbyScreen");
+      const skillButtonsContainer = document.getElementById("skillButtons");
+      const gameAudio = document.getElementById("gameAudio");
+      const gameContainer = document.getElementById("gameContainer");
+
+      let player,
+        hook,
+        username,
+        gameOver,
+        gameWon,
+        score,
+        playerLives,
+        obstacles = [],
+        gameTimer,
+        timeRemaining,
+        obstacleSpawnInterval,
+        highScore = 0,
+        initialGameTime = 60;
+
+      let boostCooldown = 4000,
+        boostReady = true,
+        boostCooldownTimerId = null,
+        boostRemainingCooldown = 0;
+      let dashCooldown = 3000,
+        dashReady = true,
+        dashCooldownTimerId = null,
+        dashRemainingCooldown = 0;
+      let mouseX = 0,
+        mouseY = 0;
+      let explodeCooldown = 8000,
+        explodeReady = true,
+        explodeCooldownTimerId = null,
+        explodeRemainingCooldown = 0;
+      const explodeScoreBonus = 50;
+
+      let bullets = [];
+      let shotEnergy = 100,
+        maxShotEnergy = 100,
+        shotCost = 20,
+        energyRegenRate = 0.5,
+        canShoot = true,
+        shootCooldownDuration = 200;
+
+      // --- <<< PERUBAHAN BARU: Variabel untuk efek RGB dan partikel ---
+      let hue = 0; // Variabel untuk menyimpan warna saat ini (0-360)
+      let particles = []; // Array untuk menyimpan semua partikel ledakan
+
+      // --- Aset Gambar ---
+      // Player dan peluru tidak lagi menggunakan gambar, jadi kita hapus
+      const obstacleImages = [
+        "item/item.jpg",
+        "item/position.jpg",
+        "item/death.jpg",
+        "item/animals.jpg",
+        "item/mushroom.jpg",
+        "item/gloo.jpg",
+      ].map((src) => {
+        const img = new Image();
+        img.src = src;
+        return img;
+      });
+
+      // Sesuaikan jumlah total gambar karena player dan peluru dihapus
+      let imagesLoaded = 0;
+      const totalImages = obstacleImages.length;
+      let fastObstacleImage,
+        normalObstacleImages = [];
+
+      function setupObstacleImageTypes() {
+        if (obstacleImages.length > 0) {
+          fastObstacleImage = obstacleImages[obstacleImages.length - 1];
+          normalObstacleImages = obstacleImages.slice(
+            0,
+            obstacleImages.length - 1
+          );
+        }
+      }
+
+      function imageLoadHandler() {
+        imagesLoaded++;
+        if (imagesLoaded === totalImages) {
+          setupObstacleImageTypes();
+          highScore =
+            parseInt(localStorage.getItem("rgbFighterHighScore")) || 0;
+          highScoreDisplay.textContent = `High Score: ${highScore}`;
+          timerDisplay.textContent = `Time: ${initialGameTime}`;
+          // ... update tombol lainnya
+          updateBoostButtonText();
+          updateDashButtonText();
+          updateExplodeButtonText();
+          updateShotEnergyDisplay();
+        }
+      }
+      obstacleImages.forEach((img) => (img.onload = imageLoadHandler));
+      // Jika tidak ada obstacle, langsung setup
+      if (totalImages === 0) imageLoadHandler();
+
+      // --- <<< PERUBAHAN BARU: Fungsi untuk membuat ledakan partikel ---
+      function createExplosion(x, y, count = 20) {
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 5, // Kecepatan horizontal acak
+            vy: (Math.random() - 0.5) * 5, // Kecepatan vertikal acak
+            size: Math.random() * 5 + 2,
+            color: `hsl(${Math.random() * 360}, 100%, 50%)`, // Warna acak untuk ledakan
+            lifespan: Math.random() * 60 + 30, // Waktu hidup partikel
+          });
+        }
+      }
+
+      function initGame() {
+        lobbyScreen.style.display = "none";
+        scoreDisplay.style.display = "block";
+        timerDisplay.style.display = "block";
+        livesDisplay.style.display = "block";
+        shotEnergyDisplay.style.display = "block";
+        highScoreDisplay.style.display = "block";
+        gameContainer.style.display = "block";
+        startButton.style.display = "none";
+        document.getElementById("timeSelection").style.display = "none";
+        resetButton.style.display = "inline-block";
+        skillButtonsContainer.style.display = "flex";
+
+        gameAudio.play().catch((e) => console.log("Autoplay dicegah:", e));
+
+        gameContainer.classList.remove("shake-effect", "hit-flash");
+
+        player = { x: 400, y: 500, vx: 0, vy: 0, width: 30, height: 40 };
+        hook = null;
+        gameOver = false;
+        gameWon = false;
+        obstacles = [];
+        bullets = [];
+        particles = []; // Bersihkan partikel saat game baru dimulai
+
+        score = 0;
+        playerLives = 3;
+        timeRemaining = initialGameTime;
+        shotEnergy = maxShotEnergy;
+
+        // ... (Reset semua skill seperti sebelumnya)
+        boostReady = true;
+        clearInterval(boostCooldownTimerId);
+        updateBoostButtonText();
+        boostButton.classList.remove("cooldown");
+        dashReady = true;
+        clearInterval(dashCooldownTimerId);
+        updateDashButtonText();
+        dashButton.classList.remove("cooldown");
+        explodeReady = true;
+        clearInterval(explodeCooldownTimerId);
+        updateExplodeButtonText();
+        explodeButton.classList.remove("cooldown");
+        canShoot = true;
+        shootButton.classList.remove("cooldown");
+
+        scoreDisplay.textContent = `Score: ${score}`;
+        livesDisplay.innerHTML = "";
+
+        for (let i = 0; i < playerLives; i++) {
+          const heart = document.createElement("span");
+          heart.textContent = "❤️";
+          heart.classList.add("heart-anim");
+          livesDisplay.appendChild(heart);
+        }
+        updateShotEnergyDisplay();
+        timerDisplay.textContent = `Time: ${timeRemaining}`;
+        timerDisplay.classList.remove("low-time");
+
+        clearInterval(gameTimer);
+        clearInterval(obstacleSpawnInterval);
+
+        gameTimer = setInterval(() => {
+          if (!gameOver) {
+            timeRemaining--;
+            timerDisplay.textContent = `Time: ${timeRemaining}`;
+            if (timeRemaining <= 10) timerDisplay.classList.add("low-time");
+
+            if (timeRemaining <= 0) {
+              gameWon = true; // Tambahkan ini
+              gameOver = true;
+              clearInterval(gameTimer);
+              clearInterval(obstacleSpawnInterval);
+              timerDisplay.classList.remove("low-time");
+              gameAudio.pause();
+              gameAudio.currentTime = 0; // <- reset posisi lagu
+
+              const winSound = document.getElementById("winAudio");
+              winSound.currentTime = 0;
+              winSound
+                .play()
+                .catch((e) => console.warn("Win sound blocked:", e));
+            }
+          }
+        }, 1000);
+
+        obstacleSpawnInterval = setInterval(spawnObstacle, 1000);
+        gameLoop();
+      }
+
+      function spawnObstacle() {
+        if (gameOver) return;
+        // ... (logika spawn obstacle sama seperti sebelumnya)
+        if (
+          normalObstacleImages.length === 0 &&
+          obstacleImages.length > 0 &&
+          !fastObstacleImage
+        )
+          setupObstacleImageTypes();
+        if (
+          normalObstacleImages.length === 0 &&
+          !fastObstacleImage &&
+          obstacleImages.length > 0
+        )
+          normalObstacleImages = [obstacleImages[0]];
+
+        let obsProps = {};
+        if (
+          Math.random() < 0.25 &&
+          normalObstacleImages.length > 0 &&
+          fastObstacleImage
+        ) {
+          obsProps = {
+            type: "fast_spiky_ball",
+            image: fastObstacleImage,
+            baseSpeed: 2.2 + Math.random() * 1.8,
+            pointsValue: 40,
+            hp: 1,
+            size: 30 + Math.random() * 15,
+          };
+        } else {
+          if (normalObstacleImages.length > 0) {
+            obsProps = {
+              type: "normal",
+              image:
+                normalObstacleImages[
+                  Math.floor(Math.random() * normalObstacleImages.length)
+                ],
+              baseSpeed: 1 + Math.random() * 2,
+              pointsValue: 25,
+              hp: 1,
+              size: 40 + Math.random() * 30,
+            };
+          } else {
+            return;
+          }
+        }
+        const speedMultiplier = Math.random() < 0.2 ? 2 : 1; // 20% kemungkinan double speed
+        obsProps.baseSpeed *= speedMultiplier;
+
+        obstacles.push({
+          x: Math.random() * (canvas.width - obsProps.size),
+          y: -obsProps.size,
+          width: obsProps.size,
+          height: obsProps.size,
+          speed: obsProps.baseSpeed,
+          image: obsProps.image,
+          hp: obsProps.hp,
+          type: obsProps.type,
+          pointsValue: obsProps.pointsValue,
+        });
+      }
+      // Ambil pilihan lagu terakhir dari localStorage
+      const savedMusic = localStorage.getItem("selectedMusic");
+      if (savedMusic) {
+        document.getElementById("musicSelect").value = savedMusic;
+        document.getElementById("gameAudio").src = savedMusic;
+      }
+
+      // ... (Event listeners untuk klik, mousemove, start, reset, dll. tetap sama)
+      canvas.addEventListener("click", (e) => {
+        if (gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left,
+          clickY = e.clientY - rect.top;
+        const dx = clickX - player.x,
+          dy = clickY - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        hook = { x: clickX, y: clickY };
+        player.vx = (dx / dist) * 5;
+        player.vy = (dy / dist) * 5;
+        score += 10;
+        scoreDisplay.textContent = `Score: ${score}`;
+      });
+      canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+      });
+      startButton.addEventListener("click", () => {
+        const input = document.getElementById("usernameInput");
+        if (input && input.value.trim() !== "") {
+          username = input.value.trim();
+        } else {
+          const errorSound = document.getElementById("errorAudio");
+          errorSound.currentTime = 0;
+          errorSound.play();
+          alert("Please enter your username!");
+          return;
+        }
+        const selectedMusic = document.getElementById("musicSelect").value;
+        document.getElementById("gameAudio").src = selectedMusic;
+
+        initialGameTime = parseInt(timeSelect.value);
+        initGame();
+      });
+      resetButton.addEventListener("click", () => {
+        scoreDisplay.style.display = "none";
+        timerDisplay.style.display = "none";
+        livesDisplay.style.display = "none";
+        shotEnergyDisplay.style.display = "none";
+        highScoreDisplay.style.display = "none";
+        lobbyScreen.style.display = "block";
+        startButton.style.display = "inline-block";
+        /* ... logika reset sama persis ... */
+        gameOver = true;
+        clearInterval(gameTimer);
+        clearInterval(obstacleSpawnInterval);
+        gameAudio.pause();
+        gameAudio.currentTime = 0;
+        gameContainer.style.display = "none";
+        lobbyScreen.style.display = "block";
+        startButton.style.display = "inline-block";
+        document.getElementById("timeSelection").style.display = "block";
+        resetButton.style.display = "none";
+        skillButtonsContainer.style.display = "none";
+        gameContainer.classList.remove("shake-effect", "hit-flash");
+        score = 0;
+        playerLives = 3;
+        shotEnergy = maxShotEnergy;
+        boostReady = true;
+        clearInterval(boostCooldownTimerId);
+        updateBoostButtonText();
+        boostButton.classList.remove("cooldown");
+        dashReady = true;
+        clearInterval(dashCooldownTimerId);
+        updateDashButtonText();
+        dashButton.classList.remove("cooldown");
+        explodeReady = true;
+        clearInterval(explodeCooldownTimerId);
+        updateExplodeButtonText();
+        explodeButton.classList.remove("cooldown");
+        canShoot = true;
+        shootButton.classList.remove("cooldown");
+        scoreDisplay.textContent = `Score: ${score}`;
+        livesDisplay.innerHTML = "";
+
+        for (let i = 0; i < playerLives; i++) {
+          const heart = document.createElement("span");
+          heart.textContent = "❤️";
+          heart.classList.add("heart-anim");
+          livesDisplay.appendChild(heart);
+        }
+        updateShotEnergyDisplay();
+        timerDisplay.textContent = `Time: ${initialGameTime}`;
+        timerDisplay.classList.remove("low-time");
+        highScoreDisplay.textContent = `High Score: ${highScore}`;
+        initGame();
+      });
+
+      // --- Skill Functions ---
+      // (Semua fungsi skill activate, startCooldown, dan updateButtonText sama seperti sebelumnya)
+      // Perubahan kecil: `activateExplodeSkill` sekarang memanggil `createExplosion`
+      document.addEventListener("keydown", (e) => {
+        /* ... logika sama ... */
+        if (gameOver && e.key.toLowerCase() !== "r") return;
+        switch (e.key.toLowerCase()) {
+          case "q":
+            activateBoostSkill();
+            break;
+          case "w":
+            activateDashSkill();
+            break;
+          case "e":
+            activateExplodeSkill();
+            break;
+          case " ":
+          case "f":
+            shootBullet();
+            break;
+          case "r":
+            if (gameOver && resetButton.style.display !== "none") {
+              // Tampilkan tombol reset saja dulu
+              resetButton.style.display = "inline-block";
+              lobbyScreen.style.display = "block";
+              startButton.style.display = "none";
+              document.getElementById("timeSelection").style.display = "none";
+            }
+            break;
+        }
+      });
+      function activateBoostSkill() {
+        if (boostReady && !gameOver) {
+          player.vy = -12;
+          boostReady = false;
+          boostButton.classList.add("cooldown");
+          startBoostCooldown();
+        }
+      }
+      function startBoostCooldown() {
+        boostRemainingCooldown = Math.ceil(boostCooldown / 1000);
+        updateBoostButtonText();
+        boostCooldownTimerId = setInterval(() => {
+          boostRemainingCooldown--;
+          updateBoostButtonText();
+          if (boostRemainingCooldown <= 0) {
+            clearInterval(boostCooldownTimerId);
+            boostReady = true;
+            boostButton.classList.remove("cooldown");
+            updateBoostButtonText();
+          }
+        }, 1000);
+      }
+      function updateBoostButtonText() {
+        boostButton.textContent = boostReady
+          ? "Skill: Boost (Q) (Ready)"
+          : `Skill: Boost (Q) (${boostRemainingCooldown}s)`;
+      }
+      function activateDashSkill() {
+        if (dashReady && !gameOver) {
+          player.x = Math.max(
+            player.width / 2,
+            Math.min(canvas.width - player.width / 2, mouseX)
+          );
+          player.y = Math.max(
+            player.height / 2,
+            Math.min(canvas.height - player.height / 2, mouseY)
+          );
+          player.vx = 0;
+          player.vy = 0;
+          dashReady = false;
+          dashButton.classList.add("cooldown");
+          startDashCooldown();
+        }
+      }
+      function startDashCooldown() {
+        dashRemainingCooldown = Math.ceil(dashCooldown / 1000);
+        updateDashButtonText();
+        dashCooldownTimerId = setInterval(() => {
+          dashRemainingCooldown--;
+          updateDashButtonText();
+          if (dashRemainingCooldown <= 0) {
+            clearInterval(dashCooldownTimerId);
+            dashReady = true;
+            dashButton.classList.remove("cooldown");
+            updateDashButtonText();
+          }
+        }, 1000);
+      }
+      function updateDashButtonText() {
+        dashButton.textContent = dashReady
+          ? "Skill: Dash (W) (Ready)"
+          : `Skill: Dash (W) (${dashRemainingCooldown}s)`;
+      }
+      function activateExplodeSkill() {
+        if (explodeReady && !gameOver) {
+          const explodeSound = document.getElementById("explodeAudio");
+          explodeSound.currentTime = 0;
+          explodeSound.play();
+          // <<< PERUBAHAN BARU: Buat ledakan untuk setiap obstacle
+          obstacles.forEach((obs) =>
+            createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2)
+          );
+          obstacles = []; // Baru hapus setelah membuat partikel
+          score += explodeScoreBonus;
+          scoreDisplay.textContent = `Score: ${score}`;
+          explodeReady = false;
+          explodeButton.classList.add("cooldown");
+          startExplodeCooldown();
+          gameContainer.classList.add("hit-flash");
+          setTimeout(() => gameContainer.classList.remove("hit-flash"), 100);
+        }
+      }
+      function startExplodeCooldown() {
+        explodeRemainingCooldown = Math.ceil(explodeCooldown / 1000);
+        updateExplodeButtonText();
+        explodeCooldownTimerId = setInterval(() => {
+          explodeRemainingCooldown--;
+          updateExplodeButtonText();
+          if (explodeRemainingCooldown <= 0) {
+            clearInterval(explodeCooldownTimerId);
+            explodeReady = true;
+            explodeButton.classList.remove("cooldown");
+            updateExplodeButtonText();
+          }
+        }, 1000);
+      }
+      function updateExplodeButtonText() {
+        explodeButton.textContent = explodeReady
+          ? "Skill: Explode (E) (Ready)"
+          : `Skill: Explode (E) (${explodeRemainingCooldown}s)`;
+      }
+      function shootBullet() {
+        if (canShoot && shotEnergy >= shotCost && !gameOver) {
+          bullets.push({
+            x: player.x,
+            y: player.y - player.height / 2,
+            width: 8,
+            height: 15,
+            speed: 10,
+          }); // Ukuran peluru disesuaikan
+          const shootSound = document.getElementById("shootAudio");
+          shootSound.currentTime = 0; // Restart sound kalau spam
+          shootSound.play();
+
+          shotEnergy -= shotCost;
+          updateShotEnergyDisplay();
+          canShoot = false;
+          shootButton.classList.add("cooldown");
+          setTimeout(() => {
+            canShoot = true;
+            if (shotEnergy >= shotCost)
+              shootButton.classList.remove("cooldown");
+          }, shootCooldownDuration);
+        }
+      }
+      function updateShotEnergyDisplay() {
+        const energyPercentage = Math.floor((shotEnergy / maxShotEnergy) * 100);
+        if (energyPercentage >= 80) {
+          shotEnergyDisplay.textContent = `🔋 Full Energy! (${energyPercentage}%)`;
+        } else if (energyPercentage >= 50) {
+          shotEnergyDisplay.textContent = `⚡ Energy: ${energyPercentage}%`;
+        } else if (energyPercentage >= 20) {
+          shotEnergyDisplay.textContent = `🪫 Low Energy: ${energyPercentage}%`;
+        } else {
+          shotEnergyDisplay.textContent = `❌ Out of Energy! (${energyPercentage}%)`;
+        }
+        if (shotEnergy < shotCost || !canShoot)
+          shootButton.classList.add("cooldown");
+        else shootButton.classList.remove("cooldown");
+        shotEnergyDisplay.classList.remove("pulse");
+        void shotEnergyDisplay.offsetWidth; // force reflow
+        shotEnergyDisplay.classList.add("pulse");
+      }
+
+      function update() {
+        if (gameOver) {
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem("rgbFighterHighScore", highScore);
+            highScoreDisplay.textContent = `High Score: ${highScore}`;
+          }
+          if (!gameContainer.classList.contains("shake-effect")) {
+            gameContainer.classList.add("shake-effect");
+            setTimeout(
+              () => gameContainer.classList.remove("shake-effect"),
+              500
+            );
+          }
+          return;
+        }
+
+        player.x += player.vx;
+        player.y += player.vy;
+        player.vy += 0.2; // Gravity
+
+        // ... (Logika batas player dan jatuh sama)
+        if (player.x - player.width / 2 < 0) {
+          player.x = player.width / 2;
+          player.vx = 0;
+        } else if (player.x + player.width / 2 > canvas.width) {
+          player.x = canvas.width - player.width / 2;
+          player.vx = 0;
+        }
+        if (player.y - player.height / 2 < 0) {
+          player.y = player.height / 2;
+          player.vy = 0;
+        }
+        if (player.y - player.height / 2 > canvas.height) {
+          playerLives--;
+          livesDisplay.innerHTML = "";
+
+          for (let i = 0; i < playerLives; i++) {
+            const heart = document.createElement("span");
+            heart.textContent = "❤️";
+            heart.classList.add("heart-anim");
+            livesDisplay.appendChild(heart);
+          }
+          if (playerLives <= 0) {
+            gameOver = true;
+            gameAudio.pause();
+            gameAudio.currentTime = 0;
+
+            const gameOverSound = document.getElementById("gameOverAudio");
+            if (gameOverSound) {
+              gameOverSound.currentTime = 0;
+              gameOverSound
+                .play()
+                .catch((e) => console.warn("Game over sound failed:", e));
+            }
+          } else {
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.vx = 0;
+            player.vy = 0;
+            gameContainer.classList.add("hit-flash");
+            setTimeout(() => gameContainer.classList.remove("hit-flash"), 200);
+          }
+        }
+
+        if (shotEnergy < maxShotEnergy) {
+          shotEnergy = Math.min(maxShotEnergy, shotEnergy + energyRegenRate);
+          updateShotEnergyDisplay();
+        }
+
+        // Update Bullets & Collision
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const bullet = bullets[i];
+          bullet.y -= bullet.speed;
+          if (bullet.y + bullet.height < 0) {
+            bullets.splice(i, 1);
+            continue;
+          }
+
+          for (let j = obstacles.length - 1; j >= 0; j--) {
+            const obs = obstacles[j];
+            if (
+              bullet.x < obs.x + obs.width &&
+              bullet.x + bullet.width > obs.x &&
+              bullet.y < obs.y + obs.height &&
+              bullet.y + bullet.height > obs.y
+            ) {
+              createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2); // <<< Ledakan!
+              obstacles.splice(j, 1);
+              const previousScore = score;
+              score += obs.pointsValue;
+              scoreDisplay.textContent = `Score: ${score}`;
+
+              // Suara milestone setiap kelipatan 1000 poin
+              if (Math.floor(previousScore / 1000) < Math.floor(score / 1000)) {
+                const milestoneAudio =
+                  document.getElementById("milestoneAudio");
+                milestoneAudio.currentTime = 0;
+                milestoneAudio.play();
+              }
+
+              // Efek animasi score
+              scoreDisplay.classList.add("bump");
+              setTimeout(() => scoreDisplay.classList.remove("bump"), 200);
+              bullets.splice(i, 1);
+              break;
+            }
+          }
+        }
+
+        // Update Obstacles & Player Collision
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const obs = obstacles[i];
+          obs.y += obs.speed;
+          if (
+            player.x - player.width / 2 < obs.x + obs.width &&
+            player.x + player.width / 2 > obs.x &&
+            player.y - player.height / 2 < obs.y + obs.height &&
+            player.y + player.height / 2 > obs.y
+          ) {
+            createExplosion(obs.x + obs.width / 2, obs.y + obs.height / 2, 10); // Ledakan kecil saat kena
+            obstacles.splice(i, 1);
+            playerLives--;
+            livesDisplay.innerHTML = "";
+
+            for (let i = 0; i < playerLives; i++) {
+              const heart = document.createElement("span");
+              heart.textContent = "❤️";
+              heart.classList.add("heart-anim");
+              livesDisplay.appendChild(heart);
+            }
+            if (playerLives <= 0) {
+              gameOver = true;
+
+              const gameOverSound = document.getElementById("gameOverAudio");
+              if (gameOverSound) {
+                gameOverSound.currentTime = 0;
+                gameOverSound
+                  .play()
+                  .catch((e) => console.warn("Game over sound failed:", e));
+              }
+            } else {
+              gameContainer.classList.add("hit-flash");
+              setTimeout(
+                () => gameContainer.classList.remove("hit-flash"),
+                200
+              );
+            }
+          }
+          if (obs.y > canvas.height) obstacles.splice(i, 1);
+        }
+
+        // <<< PERUBAHAN BARU: Update partikel
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.lifespan--;
+          if (p.lifespan <= 0) particles.splice(i, 1);
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // --- Draw Player (RGB Fighter) ---
+        // ctx.save();
+        // ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+        // ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+        // ctx.shadowBlur = 20;
+        // ctx.beginPath();
+        // ctx.moveTo(player.x, player.y - player.height / 2);
+        // ctx.lineTo(player.x - player.width / 2, player.y + player.height / 2);
+        // ctx.lineTo(player.x + player.width / 2, player.y + player.height / 2);
+        // ctx.closePath();
+        // ctx.fill();
+        // ctx.restore();
+        //kepala
+        // --- Draw Player (Stickman with RGB Body) ---
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+
+        // Kepala
+        // --- Rambut Dinamis ---
+        const hairCount = 5; // jumlah helai rambut
+        const hairLength = 8; // panjang rambut
+        const hairSpread = 10; // lebar sebaran rambut di atas kepala
+
+        for (let i = 0; i < hairCount; i++) {
+          const offset = -hairSpread / 2 + (i * hairSpread) / (hairCount - 1); // posisi horizontal tiap helai
+          const speedInfluence = Math.max(-1, Math.min(1, player.vy / 5)); // batasi efek -1 sampai 1
+          const angle = -Math.PI / 2 + (speedInfluence * Math.PI) / 5; // sudut rambut tergantung arah gerak
+
+          const startX = player.x + offset;
+          const startY = player.y - 35; // titik awal rambut (atas kepala)
+          const endX = startX + Math.cos(angle) * hairLength;
+          const endY = startY + Math.sin(angle) * hairLength;
+
+          ctx.beginPath();
+          ctx.strokeStyle = "white";
+          ctx.shadowColor = "white";
+          ctx.shadowBlur = 4;
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = "white";
+        ctx.shadowColor = `hsl(${hue}, 100%, 70%)`;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y - 25, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "white";
+        ctx.font = "16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 6;
+        ctx.fillText(username, player.x, player.y - 40);
+        ctx.stroke();
+
+        // Badan (RGB)
+        ctx.strokeStyle = `hsl(${(hue + 0) % 360}, 100%, 50%)`;
+        ctx.shadowColor = `hsl(${(hue + 0) % 360}, 100%, 50%)`;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y - 15);
+        ctx.lineTo(player.x, player.y + 10);
+        ctx.stroke();
+
+        // Tangan (RGB - beda warna biar nyala-nyala)
+        ctx.strokeStyle = `hsl(${(hue + 60) % 360}, 100%, 50%)`;
+        ctx.shadowColor = `hsl(${(hue + 60) % 360}, 100%, 50%)`;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(player.x - 10, player.y - 5);
+        ctx.lineTo(player.x + 10, player.y - 5);
+        ctx.stroke();
+
+        // Kaki (RGB - warna lain lagi)
+        ctx.strokeStyle = `hsl(${(hue + 120) % 360}, 100%, 50%)`;
+        ctx.shadowColor = `hsl(${(hue + 120) % 360}, 100%, 50%)`;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+
+        // Cek apakah player sedang turun
+        if (player.vy > 2) {
+          // Kaki terbuka saat jatuh
+          ctx.moveTo(player.x, player.y + 10);
+          ctx.lineTo(player.x - 8, player.y + 25);
+          ctx.moveTo(player.x, player.y + 10);
+          ctx.lineTo(player.x + 8, player.y + 25);
+        } else {
+          // Kaki tertutup saat diam / berdiri
+          ctx.moveTo(player.x - 2, player.y + 10);
+          ctx.lineTo(player.x - 2, player.y + 25);
+          ctx.moveTo(player.x + 2, player.y + 10);
+          ctx.lineTo(player.x + 2, player.y + 25);
+        }
+
+        ctx.stroke();
+        ctx.restore();
+
+        if (hook) {
+          ctx.save();
+
+          const startX = player.x;
+          const startY = player.y;
+          const endX = hook.x;
+          const endY = hook.y;
+          const controlX = (startX + endX) / 2;
+          const controlY = (startY + endY) / 2 - 40; // Lengkungan ke atas
+
+          const segmentCount = 30; // Banyaknya mata rantai
+          const chainRadius = 2; // Ukuran tiap mata rantai
+
+          for (let i = 0; i <= 1; i += 1 / segmentCount) {
+            // Rumus Quadratic Bezier untuk ambil titik-titik di kurva
+            const t = i;
+            const x =
+              (1 - t) * (1 - t) * startX +
+              2 * (1 - t) * t * controlX +
+              t * t * endX;
+            const y =
+              (1 - t) * (1 - t) * startY +
+              2 * (1 - t) * t * controlY +
+              t * t * endY;
+
+            // Gambar mata rantai
+            ctx.beginPath();
+            ctx.fillStyle = "white";
+            ctx.shadowColor = "white";
+            ctx.shadowBlur = 8;
+            ctx.arc(x, y, chainRadius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.restore();
+
+          // Lepaskan hook jika sudah dekat
+          if (Math.hypot(player.x - hook.x, player.y - hook.y) < 20)
+            hook = null;
+        }
+
+        // --- Draw Bullets (RGB) ---
+        bullets.forEach((bullet) => {
+          ctx.save();
+          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+          ctx.shadowColor = `hsl(${hue}, 100%, 50%)`;
+          ctx.shadowBlur = 15;
+          ctx.fillRect(
+            bullet.x - bullet.width / 2,
+            bullet.y,
+            bullet.width,
+            bullet.height
+          );
+          ctx.restore();
+        });
+
+        // Draw obstacles (tetap gambar biasa)
+        obstacles.forEach((obs) => {
+          ctx.drawImage(obs.image, obs.x, obs.y, obs.width, obs.height);
+        });
+
+        // --- Draw Particles ---
+        particles.forEach((p) => {
+          ctx.save();
+          ctx.globalAlpha = p.lifespan / 60; // Partikel memudar
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+
+        if (gameOver) {
+          ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = "white";
+          ctx.font = "60px sans-serif";
+          ctx.textAlign = "center";
+
+          if (gameWon) {
+            ctx.fillText("YOU WIN!", canvas.width / 2, canvas.height / 2 - 40);
+          } else {
+            ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+          }
+          ctx.font = "30px sans-serif";
+          ctx.fillText(
+            `${username} - Final Score: ${score}`,
+            canvas.width / 2,
+            canvas.height / 2 + 20
+          );
+          ctx.font = "20px sans-serif";
+          ctx.fillText(
+            "Press 'R' to return to Lobby",
+            canvas.width / 2,
+            canvas.height / 2 + 70
+          );
+        }
+      }
+
+      function gameLoop() {
+        hue = (hue + 1) % 360; // <<< PERUBAHAN BARU: Update warna setiap frame
+        update();
+        draw();
+        if (!gameOver) {
+          requestAnimationFrame(gameLoop);
+        }
+      }
+      document.getElementById("musicSelect").addEventListener("change", (e) => {
+        const selected = e.target.value;
+        localStorage.setItem("selectedMusic", selected); // Simpan pilihan
+        // Jangan langsung play, biarkan diputar saat game dimulai
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,232 @@
+body {
+  margin: 0;
+  background-color: #000; /* Latar belakang lebih gelap untuk efek glow */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  font-family: sans-serif;
+  flex-direction: column;
+  position: relative;
+}
+
+#gameContainer {
+  position: relative;
+  width: 800px;
+  height: 600px;
+  border: 2px solid #fff;
+  background-color: #1a1a1a;
+  overflow: hidden;
+  display: none;
+  box-shadow: 0 0 15px #fff; /* Memberi sedikit glow pada frame game */
+}
+
+#gameBackground {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("item/image.jpg");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.7; /* Sedikit redup agar objek RGB lebih menonjol */
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  background-color: transparent;
+}
+
+.shake-effect {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes shake {
+  10%,
+  90% {
+    transform: translate3d(-1px, 0, 0);
+  }
+  20%,
+  80% {
+    transform: translate3d(2px, 0, 0);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translate3d(-4px, 0, 0);
+  }
+  40%,
+  60% {
+    transform: translate3d(4px, 0, 0);
+  }
+}
+
+#gameContainer.hit-flash {
+  animation: flashRed 0.2s ease-out;
+}
+
+@keyframes flashRed {
+  from {
+    box-shadow: 0 0 15px #fff;
+  }
+  50% {
+    box-shadow: 0 0 30px #ff0000;
+  }
+  to {
+    box-shadow: 0 0 15px #fff;
+  }
+}
+
+#gameControls,
+#lobbyScreen,
+#scoreContainer,
+#highScoreDisplay {
+  text-shadow: 0 0 5px #fff;
+}
+
+#gameControls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 20px;
+}
+
+#timeSelection {
+  margin-bottom: 20px;
+}
+#timeSelection label {
+  color: #e0e0e0;
+  font-size: 20px;
+  margin-right: 10px;
+}
+#timeSelect {
+  padding: 8px 12px;
+  font-size: 18px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  background-color: #222;
+  color: #e0e0e0;
+}
+
+#startButton,
+#resetButton,
+#boostButton,
+#dashButton,
+#explodeButton,
+#shootButton {
+  padding: 10px 20px;
+  font-size: 24px;
+  cursor: pointer;
+  background-color: #007bff;
+  color: white;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  margin: 5px;
+  transition: all 0.2s;
+  text-shadow: none;
+}
+#startButton:hover,
+#resetButton:hover {
+  background-color: #0056b3;
+}
+
+#boostButton.cooldown,
+#dashButton.cooldown,
+#explodeButton.cooldown,
+#shootButton.cooldown {
+  background-color: #333;
+  color: #777;
+  border-color: #555;
+  cursor: not-allowed;
+}
+
+#scoreContainer {
+  display: flex;
+  justify-content: space-around;
+  width: 800px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+#scoreDisplay,
+#highScoreDisplay,
+#livesDisplay,
+#shotEnergyDisplay {
+  color: #e0e0e0;
+  font-size: 24px;
+  margin: 5px 10px;
+}
+#timerDisplay {
+  color: #e0e0e0;
+  font-size: 32px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  transition: color 0.3s ease-in-out;
+}
+#timerDisplay.low-time {
+  color: #ff4444;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+#lobbyScreen {
+  color: #e0e0e0;
+  font-size: 32px;
+  text-align: center;
+  margin-bottom: 30px;
+}
+#skillButtons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.heart-anim {
+  animation: pop-heart 0.5s ease;
+}
+
+@keyframes pulseEnergy {
+  0%,
+  100% {
+    transform: scale(1);
+    color: white;
+    text-shadow: 0 0 10px #0ff;
+  }
+  50% {
+    transform: scale(1.15);
+    color: #00ffff;
+    text-shadow: 0 0 15px #00f2ff, 0 0 30px #0ff;
+  }
+}
+
+#shotEnergyDisplay.pulse {
+  animation: pulseEnergy 0.5s ease;
+}
+
+@keyframes pop-heart {
+  0% {
+    transform: scale(1);
+    filter: brightness(2);
+  }
+  50% {
+    transform: scale(1.5);
+    filter: brightness(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
